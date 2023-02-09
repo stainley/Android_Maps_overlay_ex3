@@ -13,5 +13,6 @@
 .externalNativeBuild
 .cxx
 local.properties
-app/
+
 .idea
+app/src/main/res/values/google_api_key.xml
