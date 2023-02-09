@@ -1,22 +1,16 @@
 package ca.app.assasins.exerciseoverlaymap;
 
-import android.annotation.SuppressLint;
 import android.content.Context;
-import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.Point;
 import android.graphics.Rect;
-import android.location.Location;
-import android.location.LocationListener;
-import android.location.LocationManager;
 import android.os.Bundle;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
-import androidx.core.app.ActivityCompat;
 import androidx.fragment.app.FragmentActivity;
 
 import com.google.android.gms.maps.CameraUpdateFactory;
@@ -38,37 +32,28 @@ import java.util.ArrayList;
 import java.util.List;
 
 import ca.app.assasins.exerciseoverlaymap.databinding.ActivityMapsBinding;
+import ca.app.assasins.exerciseoverlaymap.util.DistanceUtil;
 
 public class MapsActivity extends FragmentActivity implements OnMapReadyCallback {
 
-    private enum Abc {
+    private enum Letters {
         A, B, C, D
     }
 
     private static final int POLYGON_SIDES = 4;
     private static final int POLYLINE_SIDES = 4;
     private GoogleMap mMap;
-    private ActivityMapsBinding binding;
-    private static final int REQUEST_CODE = 1;
     private Polygon shape;
     private Polyline line;
     private final List<Polyline> lines = new ArrayList<>();
     private final List<Marker> textMarkers = new ArrayList<>();
     private final List<Marker> markers = new ArrayList<>();
 
-    private Marker homeMarker;
-    private Marker destMarker;
-
-
-    // location with location manager and listener
-    private LocationManager locationManager;
-    private LocationListener locationListener;
-
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        binding = ActivityMapsBinding.inflate(getLayoutInflater());
+        ca.app.assasins.exerciseoverlaymap.databinding.ActivityMapsBinding binding = ActivityMapsBinding.inflate(getLayoutInflater());
         setContentView(binding.getRoot());
 
         // Obtain the SupportMapFragment and get notified when the map is ready to be used.
@@ -82,11 +67,8 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
     @Override
     public void onMapReady(@NonNull GoogleMap googleMap) {
         mMap = googleMap;
-
-
         mMap.setMinZoomPreference(10);
 
-        // Add a marker in Sydney and move the camera
         LatLng toronto = new LatLng(43.6532, -79.3832);
         mMap.addMarker(new MarkerOptions().position(toronto).title("Marker in Toronto"));
         mMap.moveCamera(CameraUpdateFactory.newLatLng(toronto));
@@ -95,38 +77,38 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         mMap.setOnMapLongClickListener(new GoogleMap.OnMapLongClickListener() {
             @Override
             public void onMapLongClick(@NonNull LatLng latLng) {
-                Abc[] abc = Abc.values();
+                Letters[] letters = Letters.values();
 
                 if (markers.size() == POLYLINE_SIDES) {
                     clearMap();
                 }
 
                 MarkerOptions optionsMarker = new MarkerOptions().position(latLng)
-                        .title(abc[markers.size()].name());
+                        .title(letters[markers.size()].name());
 
                 markers.add(mMap.addMarker(optionsMarker));
 
                 if (markers.size() == POLYGON_SIDES) {
-                    this.drawPolygonShape();
+                    this.drawPolygonAndPolylineShape();
 
                 }
             }
 
-            private void drawLineFromTwoMarkers(LatLng latLng, LatLng latLng2) {
+            private void drawLineFromTwoMarkers(LatLng fromLatLng, LatLng toLatLng) {
 
                 PolylineOptions polylineOptions = new PolylineOptions();
                 polylineOptions.color(Color.RED);
                 polylineOptions.clickable(true);
                 polylineOptions.zIndex(1000);
                 polylineOptions.width(15);
-                polylineOptions.add(latLng, latLng2);
+                polylineOptions.add(fromLatLng, toLatLng);
 
                 line = mMap.addPolyline(polylineOptions);
                 line.setTag(line.getId());
                 lines.add(line);
             }
 
-            private void drawPolygonShape() {
+            private void drawPolygonAndPolylineShape() {
                 Projection mapProjection = mMap.getProjection();
 
                 ArrayList<Point> screenPoints = new ArrayList<>();
@@ -194,11 +176,11 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
             LatLng pointA = polyline.getPoints().get(0);
             LatLng pointB = polyline.getPoints().get(polyline.getPoints().size() - 1);
 
-            String distance = showDistance(pointA, pointB);
+            String distance = new DistanceUtil().showDistance(pointA, pointB);
             System.out.println(distance);
             LatLng midPoint = SphericalUtil.interpolate(pointA, pointB, 0.5);
 
-            Marker markerForDistanceText = addText(this, mMap, midPoint, distance, 2, 18);
+            Marker markerForDistanceText = addText(this, mMap, midPoint, distance, 2, 14);
             textMarkers.add(markerForDistanceText);
 
         });
@@ -229,67 +211,9 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
             // Get the mid point X
             LatLng centerPoint = new LatLng((latitude * 0.5) / 2, (longitude * 0.5) / 2);
 
-            Marker markerForDistanceText = addText(this, mMap, centerPoint, formatNumber(distance), 2, 18);
+            Marker markerForDistanceText = addText(this, mMap, centerPoint, new DistanceUtil().formatNumber(distance), 2, 18);
             textMarkers.add(markerForDistanceText);
         });
-    }
-
-    private void startUpdateLocation() {
-        if (ActivityCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-            return;
-        }
-        locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 5000, 0, locationListener);
-
-        Location lastKnownLocation = locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER);
-        setHomeMarker(lastKnownLocation);
-    }
-
-    private void requestLocationPermission() {
-        ActivityCompat.requestPermissions(this, new String[]{android.Manifest.permission.ACCESS_FINE_LOCATION}, REQUEST_CODE);
-    }
-
-    private boolean hasLocationPermission() {
-        return ActivityCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED;
-    }
-
-    private void setHomeMarker(Location location) {
-        LatLng userLocation = new LatLng(location.getLatitude(), location.getLongitude());
-        MarkerOptions options = new MarkerOptions().position(userLocation)
-                .title("You are here")
-                .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_AZURE))
-                .snippet("Your Location");
-        homeMarker = mMap.addMarker(options);
-        mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(userLocation, 15));
-    }
-
-    @Override
-    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
-
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-        if (REQUEST_CODE == requestCode) {
-            if (ActivityCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
-                locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 5000, 0, locationListener);
-            }
-        }
-    }
-
-    private String showDistance(LatLng mMarkerA, LatLng mMarkerB) {
-        double distance = SphericalUtil.computeDistanceBetween(mMarkerA, mMarkerB);
-        return formatNumber(distance);
-    }
-
-    @SuppressLint("DefaultLocale")
-    private String formatNumber(double distance) {
-        String unit = "m";
-        if (distance < 1) {
-            distance *= 1000;
-            unit = "mm";
-        } else if (distance > 1000) {
-            distance /= 1000;
-            unit = "km";
-        }
-
-        return String.format("%4.3f%s", distance, unit);
     }
 
     // Marker as a textField
